@@ -13,6 +13,19 @@ export const eventRouter = createTRPCRouter({
             });
         }),
 
+    createBulk: publicProcedure
+        .input(z.object({ names: z.array(z.string().min(1)) }))
+        .mutation(async ({ ctx, input }) => {
+            if (input.names.length === 0) {
+                return { count: 0 };
+            }
+
+            const values = input.names.map((name) => ({ name }));
+            await ctx.db.insert(events).values(values);
+
+            return { count: input.names.length };
+        }),
+
     getAll: publicProcedure.query(async ({ ctx }) => {
         const allEvents = await ctx.db.query.events.findMany({
             orderBy: (events, { desc }) => [desc(events.createdAt)],
