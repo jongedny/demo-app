@@ -10,9 +10,17 @@ import { env } from "~/env";
  */
 export async function GET(request: NextRequest) {
     try {
-        // Verify cron secret if configured
+        // Verify authorization
+        // Vercel Cron sends requests with an Authorization header
+        // Manual calls can use the secret query parameter
+        const authHeader = request.headers.get("authorization");
         const cronSecret = request.nextUrl.searchParams.get("secret");
-        if (env.CRON_SECRET && cronSecret !== env.CRON_SECRET) {
+
+        // Check if this is a Vercel Cron request (has Authorization header starting with "Bearer")
+        const isVercelCron = authHeader?.startsWith("Bearer ");
+
+        // For manual testing, verify the secret query parameter
+        if (!isVercelCron && env.CRON_SECRET && cronSecret !== env.CRON_SECRET) {
             console.error("[Cron API] Unauthorized access attempt");
             return NextResponse.json(
                 { error: "Unauthorized" },
