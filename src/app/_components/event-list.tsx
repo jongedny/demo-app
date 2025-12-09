@@ -174,6 +174,7 @@ export function EventList() {
                                                     ))}
                                                 </div>
                                             )}
+                                            <EventActions eventId={event.id} />
                                         </div>
                                     )}
                                 </div>
@@ -190,6 +191,85 @@ export function EventList() {
                     </div>
                 ))}
             </div>
+        </div>
+    );
+}
+
+function EventActions({ eventId }: { eventId: number }) {
+    const utils = api.useUtils();
+    const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    const findRelatedBooks = api.event.findRelatedBooks.useMutation({
+        onSuccess: (data) => {
+            setMessage({
+                type: 'success',
+                text: data.cached
+                    ? `${data.count} related books (cached)`
+                    : `Found ${data.count} related books!`
+            });
+            setTimeout(() => setMessage(null), 3000);
+        },
+        onError: (error) => {
+            setMessage({ type: 'error', text: error.message });
+            setTimeout(() => setMessage(null), 3000);
+        },
+    });
+
+    const suggestContent = api.event.suggestContent.useMutation({
+        onSuccess: (data) => {
+            setMessage({ type: 'success', text: `Generated ${data.count} content pieces!` });
+            setTimeout(() => setMessage(null), 3000);
+            void utils.content.getByEvent.invalidate({ eventId });
+        },
+        onError: (error) => {
+            setMessage({ type: 'error', text: error.message });
+            setTimeout(() => setMessage(null), 3000);
+        },
+    });
+
+    return (
+        <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap gap-2">
+                <button
+                    onClick={() => findRelatedBooks.mutate({ eventId })}
+                    disabled={findRelatedBooks.isPending}
+                    className="rounded-lg bg-blue-500/20 px-3 py-1.5 text-sm text-blue-400 transition-colors hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {findRelatedBooks.isPending ? (
+                        <span className="flex items-center gap-2">
+                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"></div>
+                            Finding...
+                        </span>
+                    ) : (
+                        '📚 Related Books'
+                    )}
+                </button>
+                <button
+                    onClick={() => suggestContent.mutate({ eventId })}
+                    disabled={suggestContent.isPending}
+                    className="rounded-lg bg-purple-500/20 px-3 py-1.5 text-sm text-purple-400 transition-colors hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {suggestContent.isPending ? (
+                        <span className="flex items-center gap-2">
+                            <div className="h-3 w-3 animate-spin rounded-full border-2 border-purple-400 border-t-transparent"></div>
+                            Generating...
+                        </span>
+                    ) : (
+                        '✨ Suggest Content'
+                    )}
+                </button>
+                <a
+                    href={`/content?eventId=${eventId}`}
+                    className="rounded-lg bg-green-500/20 px-3 py-1.5 text-sm text-green-400 transition-colors hover:bg-green-500/30"
+                >
+                    👁️ View Content
+                </a>
+            </div>
+            {message && (
+                <div className={`text-xs ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {message.text}
+                </div>
+            )}
         </div>
     );
 }

@@ -110,3 +110,112 @@ Do not include any other text or explanation. Always provide at least 1-2 events
         );
     }
 }
+
+export interface GeneratedContent {
+    title: string;
+    content: string;
+}
+
+/**
+ * Generates blog post content about an event and related books using OpenAI
+ * @param eventName - Name of the event
+ * @param eventDescription - Description of the event
+ * @param eventKeywords - Array of keywords related to the event
+ * @param relatedBooks - Array of related books with title, author, and description
+ * @returns Array of 4 generated content pieces with title and content
+ */
+export async function generateEventContent(
+    eventName: string,
+    eventDescription: string | null,
+    eventKeywords: string | null,
+    relatedBooks: Array<{ title: string; author: string; description: string | null }>
+): Promise<GeneratedContent[]> {
+    const keywordsArray = eventKeywords ? eventKeywords.split(',').map(k => k.trim()) : [];
+
+    const booksInfo = relatedBooks.length > 0
+        ? relatedBooks.map(b => `- "${b.title}" by ${b.author}${b.description ? `: ${b.description}` : ''}`).join('\n')
+        : 'No related books found.';
+
+    const prompt = `Write 4 short blog post pieces (200-300 words each) about the event "${eventName}" and its related books.
+
+Event Details:
+- Name: ${eventName}
+- Description: ${eventDescription || 'No description provided'}
+- Keywords: ${keywordsArray.join(', ') || 'None'}
+
+Related Books:
+${booksInfo}
+
+Each blog post should:
+1. Be engaging and informative
+2. Connect the event theme to the related books
+3. Be 200-300 words in length
+4. Have a catchy title
+5. Be suitable for a book recommendation website
+
+Please respond with ONLY a JSON array of objects in this exact format:
+[
+  {
+    "title": "Blog Post Title 1",
+    "content": "The blog post content here..."
+  }
+]
+
+Do not include any other text or explanation. Always provide exactly 4 blog posts.`;
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a creative content writer specializing in book recommendations and literary events. Always respond with valid JSON arrays only.",
+                },
+                {
+                    role: "user",
+                    content: prompt,
+                },
+            ],
+            temperature: 0.8,
+            max_tokens: 2000,
+        });
+
+        const responseContent = completion.choices[0]?.message?.content;
+        if (!responseContent) {
+            throw new Error("No response from OpenAI");
+        }
+
+        console.log(`[OpenAI Service] Raw content generation response:`, responseContent);
+
+        // Parse the JSON response
+        const generatedContent = JSON.parse(responseContent.trim()) as GeneratedContent[];
+
+        // Validate that we got an array of objects
+        if (!Array.isArray(generatedContent)) {
+            throw new Error("OpenAI response is not an array");
+        }
+
+        // Filter and validate content objects, limit to 4 pieces
+        const validContent = generatedContent
+            .filter((item) => {
+                return (
+                    typeof item === "object" &&
+                    item !== null &&
+                    typeof item.title === "string" &&
+                    item.title.length > 0 &&
+                    typeof item.content === "string" &&
+                    item.content.length > 0
+                );
+            })
+            .slice(0, 4);
+
+        console.log(`[OpenAI Service] Generated ${validContent.length} content pieces for event "${eventName}"`);
+
+        return validContent;
+    } catch (error) {
+        console.error("[OpenAI Service] Error generating content:", error);
+        throw new Error(
+            `Failed to generate content from OpenAI: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+    }
+}

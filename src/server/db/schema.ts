@@ -2,7 +2,7 @@
 // https://orm.drizzle.team/docs/sql-schema-declaration
 // Force rebuild - updated schema to use "Another Read" prefix
 
-import { pgTableCreator, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTableCreator, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
 
 /**
  * This is an example of how to use the multi-project schema feature of Drizzle ORM. Use the same
@@ -37,4 +37,21 @@ export const books = createTable("book", {
   isSample: text("is_sample"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const eventBooks = createTable("event_book", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => events.id),
+  bookId: integer("book_id").notNull().references(() => books.id),
+  matchScore: integer("match_score"), // Optional: store relevance score
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const content = createTable("content", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => events.id),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  relatedBookIds: text("related_book_ids"), // JSON array of book IDs
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -9,6 +9,7 @@ export function Sidebar() {
     const navItems = [
         { href: "/", label: "Events", icon: "📅" },
         { href: "/books", label: "Books", icon: "📚" },
+        { href: "/content", label: "Content", icon: "📝" },
     ];
 
     return (
@@ -29,8 +30,8 @@ export function Sidebar() {
                                 key={item.href}
                                 href={item.href}
                                 className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all ${isActive
-                                        ? "bg-gray-800 text-white"
-                                        : "text-gray-400 hover:bg-gray-900 hover:text-white"
+                                    ? "bg-gray-800 text-white"
+                                    : "text-gray-400 hover:bg-gray-900 hover:text-white"
                                     }`}
                             >
                                 <span className="text-lg">{item.icon}</span>

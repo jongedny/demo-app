@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, or, like, sql } from "drizzle-orm";
 
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { events } from "~/server/db/schema";
+import { events, books, eventBooks, content } from "~/server/db/schema";
+import { generateEventContent } from "~/server/services/openai";
 
 export const eventRouter = createTRPCRouter({
     create: publicProcedure
@@ -64,5 +65,216 @@ export const eventRouter = createTRPCRouter({
                 .returning();
 
             return updated[0];
+        }),
+
+    findRelatedBooks: publicProcedure
+        .input(z.object({ eventId: z.number() }))
+        .mutation(async ({ ctx, input }) => {
+            // Get the event
+            const event = await ctx.db.query.events.findFirst({
+                where: eq(events.id, input.eventId),
+            });
+
+            if (!event) {
+                throw new Error("Event not found");
+            }
+
+            // Check if we already have related books
+            const existingRelations = await ctx.db.query.eventBooks.findMany({
+                where: eq(eventBooks.eventId, input.eventId),
+            });
+
+            if (existingRelations.length > 0) {
+                // Return existing related books
+                const relatedBookIds = existingRelations.map(r => r.bookId);
+                const relatedBooks = await ctx.db.query.books.findMany({
+                    where: (books, { inArray }) => inArray(books.id, relatedBookIds),
+                });
+                return { books: relatedBooks, count: relatedBooks.length, cached: true };
+            }
+
+            // Parse event keywords
+            const eventKeywords = event.keywords
+                ? event.keywords.split(',').map(k => k.trim().toLowerCase())
+                : [];
+
+            if (eventKeywords.length === 0 && !event.description) {
+                return { books: [], count: 0, cached: false };
+            }
+
+            // Find matching books
+            const allBooks = await ctx.db.query.books.findMany();
+
+            const matchedBooks = allBooks
+                .map(book => {
+                    let score = 0;
+                    const searchText = `${book.title} ${book.description || ''} ${book.keywords || ''}`.toLowerCase();
+
+                    // Check each event keyword
+                    eventKeywords.forEach(keyword => {
+                        if (searchText.includes(keyword)) {
+                            score += 10;
+                        }
+                    });
+
+                    // Check event description words
+                    if (event.description) {
+                        const descWords = event.description.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+                        descWords.forEach(word => {
+                            if (searchText.includes(word)) {
+                                score += 2;
+                            }
+                        });
+                    }
+
+                    return { book, score };
+                })
+                .filter(({ score }) => score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10); // Limit to top 10 matches
+
+            // Store the relationships
+            if (matchedBooks.length > 0) {
+                await ctx.db.insert(eventBooks).values(
+                    matchedBooks.map(({ book, score }) => ({
+                        eventId: input.eventId,
+                        bookId: book.id,
+                        matchScore: score,
+                    }))
+                );
+            }
+
+            return {
+                books: matchedBooks.map(m => m.book),
+                count: matchedBooks.length,
+                cached: false
+            };
+        }),
+
+    getRelatedBooks: publicProcedure
+        .input(z.object({ eventId: z.number() }))
+        .query(async ({ ctx, input }) => {
+            const relations = await ctx.db.query.eventBooks.findMany({
+                where: eq(eventBooks.eventId, input.eventId),
+                orderBy: (eventBooks, { desc }) => [desc(eventBooks.matchScore)],
+            });
+
+            if (relations.length === 0) {
+                return [];
+            }
+
+            const bookIds = relations.map(r => r.bookId);
+            const relatedBooks = await ctx.db.query.books.findMany({
+                where: (books, { inArray }) => inArray(books.id, bookIds),
+            });
+
+            return relatedBooks;
+        }),
+
+    suggestContent: publicProcedure
+        .input(z.object({ eventId: z.number() }))
+        .mutation(async ({ ctx, input }) => {
+            // Get the event
+            const event = await ctx.db.query.events.findFirst({
+                where: eq(events.id, input.eventId),
+            });
+
+            if (!event) {
+                throw new Error("Event not found");
+            }
+
+            // Check if related books exist, if not find them first
+            let relatedBooks = await ctx.db.query.eventBooks.findMany({
+                where: eq(eventBooks.eventId, input.eventId),
+            });
+
+            if (relatedBooks.length === 0) {
+                // Find related books first
+                const findResult = await ctx.db.transaction(async (tx) => {
+                    // This is a simplified version - in production you'd call the findRelatedBooks logic
+                    const eventKeywords = event.keywords
+                        ? event.keywords.split(',').map(k => k.trim().toLowerCase())
+                        : [];
+
+                    const allBooks = await tx.query.books.findMany();
+
+                    const matchedBooks = allBooks
+                        .map(book => {
+                            let score = 0;
+                            const searchText = `${book.title} ${book.description || ''} ${book.keywords || ''}`.toLowerCase();
+
+                            eventKeywords.forEach(keyword => {
+                                if (searchText.includes(keyword)) {
+                                    score += 10;
+                                }
+                            });
+
+                            if (event.description) {
+                                const descWords = event.description.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+                                descWords.forEach(word => {
+                                    if (searchText.includes(word)) {
+                                        score += 2;
+                                    }
+                                });
+                            }
+
+                            return { book, score };
+                        })
+                        .filter(({ score }) => score > 0)
+                        .sort((a, b) => b.score - a.score)
+                        .slice(0, 10);
+
+                    if (matchedBooks.length > 0) {
+                        await tx.insert(eventBooks).values(
+                            matchedBooks.map(({ book, score }) => ({
+                                eventId: input.eventId,
+                                bookId: book.id,
+                                matchScore: score,
+                            }))
+                        );
+                    }
+
+                    return matchedBooks.map(m => m.book);
+                });
+
+                relatedBooks = await ctx.db.query.eventBooks.findMany({
+                    where: eq(eventBooks.eventId, input.eventId),
+                });
+            }
+
+            // Get full book details
+            const bookIds = relatedBooks.map(r => r.bookId);
+            const bookDetails = bookIds.length > 0
+                ? await ctx.db.query.books.findMany({
+                    where: (books, { inArray }) => inArray(books.id, bookIds),
+                })
+                : [];
+
+            // Generate content using OpenAI
+            const generatedContent = await generateEventContent(
+                event.name,
+                event.description,
+                event.keywords,
+                bookDetails.map(b => ({
+                    title: b.title,
+                    author: b.author,
+                    description: b.description,
+                }))
+            );
+
+            // Store the generated content
+            const storedContent = await ctx.db.insert(content).values(
+                generatedContent.map(gc => ({
+                    eventId: input.eventId,
+                    title: gc.title,
+                    content: gc.content,
+                    relatedBookIds: JSON.stringify(bookIds),
+                }))
+            ).returning();
+
+            return {
+                content: storedContent,
+                count: storedContent.length
+            };
         }),
 });
