@@ -99,7 +99,8 @@ export function ContentList({ eventId }: ContentListProps) {
 
 function RelatedBooksInfo({ bookIds }: { bookIds: string }) {
     const ids = JSON.parse(bookIds) as number[];
-    const { data: allBooks } = api.book.getAll.useQuery();
+    // Fetch all books with a high limit to ensure we get the related ones
+    const { data: allBooks } = api.book.getAll.useQuery({ limit: 100 });
 
     if (!allBooks || ids.length === 0) {
         return null;
