@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { env } from "~/env";
+import { OPENAI_CONFIG } from "~/server/config/prompts";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -24,49 +25,23 @@ export async function fetchDailyUKEvents(): Promise<DailyEvent[]> {
         month: "long",
     });
 
-    const prompt = `Suggest up to 4 events, celebrations, or awareness days that are observed or could be celebrated in the United Kingdom on ${dateString}. 
-
-These can include:
-- Major holidays (e.g., Christmas Day on 25th December)
-- National awareness days (e.g., National Dog Day on 26th August)
-- Historical commemorations
-- Seasonal celebrations
-- International days observed in the UK
-
-If there are no major well-known events on this specific date, suggest relevant seasonal events, awareness days, or historical events that occurred on this date.
-
-For each event, provide:
-1. name: The event name
-2. keywords: An array of 3-5 relevant keywords related to the event
-3. description: A brief description of the event (maximum 200 words)
-
-Please respond with ONLY a JSON array of objects in this exact format:
-[
-  {
-    "name": "Event Name 1",
-    "keywords": ["keyword1", "keyword2", "keyword3"],
-    "description": "A brief description of the event..."
-  }
-]
-
-Do not include any other text or explanation. Always provide at least 1-2 events.`;
+    const config = OPENAI_CONFIG.dailyEvents;
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: config.model,
             messages: [
                 {
                     role: "system",
-                    content:
-                        "You are a helpful assistant that provides information about UK events and celebrations. Always respond with valid JSON arrays only.",
+                    content: config.systemMessage,
                 },
                 {
                     role: "user",
-                    content: prompt,
+                    content: config.userPrompt(dateString),
                 },
             ],
-            temperature: 0.7,
-            max_tokens: 500,
+            temperature: config.temperature,
+            max_tokens: config.maxTokens,
         });
 
         const content = completion.choices[0]?.message?.content;
@@ -136,48 +111,28 @@ export async function generateEventContent(
         ? relatedBooks.map(b => `- "${b.title}" by ${b.author}${b.description ? `: ${b.description}` : ''}`).join('\n')
         : 'No related books found.';
 
-    const prompt = `Write 4 short blog post pieces (200-300 words each) about the event "${eventName}" and its related books.
-
-Event Details:
-- Name: ${eventName}
-- Description: ${eventDescription || 'No description provided'}
-- Keywords: ${keywordsArray.join(', ') || 'None'}
-
-Related Books:
-${booksInfo}
-
-Each blog post should:
-1. Be engaging and informative
-2. Connect the event theme to the related books
-3. Be 200-300 words in length
-4. Have a catchy title
-5. Be suitable for a book recommendation website
-
-Please respond with ONLY a JSON array of objects in this exact format:
-[
-  {
-    "title": "Blog Post Title 1",
-    "content": "The blog post content here..."
-  }
-]
-
-Do not include any other text or explanation. Always provide exactly 4 blog posts.`;
+    const config = OPENAI_CONFIG.contentGeneration;
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: config.model,
             messages: [
                 {
                     role: "system",
-                    content: "You are a creative content writer specializing in book recommendations and literary events. Always respond with valid JSON arrays only.",
+                    content: config.systemMessage,
                 },
                 {
                     role: "user",
-                    content: prompt,
+                    content: config.userPrompt(
+                        eventName,
+                        eventDescription || 'No description provided',
+                        keywordsArray.join(', ') || 'None',
+                        booksInfo
+                    ),
                 },
             ],
-            temperature: 0.8,
-            max_tokens: 2000,
+            temperature: config.temperature,
+            max_tokens: config.maxTokens,
         });
 
         const responseContent = completion.choices[0]?.message?.content;
