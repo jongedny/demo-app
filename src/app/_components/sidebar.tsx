@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { api } from "~/trpc/react";
 import { logoutAction } from "../auth/actions";
 import { useState } from "react";
+import { Icon } from "./icon";
 
 export function Sidebar() {
     const pathname = usePathname();
@@ -12,10 +13,11 @@ export function Sidebar() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     const navItems = [
-        { href: "/", label: "Events", icon: "📅", adminOnly: false },
-        { href: "/books", label: "Books", icon: "📚", adminOnly: false },
-        { href: "/content", label: "Content", icon: "📝", adminOnly: false },
-        { href: "/users", label: "Users", icon: "👥", adminOnly: true },
+        { href: "/", label: "Events", icon: "event", adminOnly: false },
+        { href: "/books", label: "Books", icon: "menu_book", adminOnly: false },
+        { href: "/content", label: "Content", icon: "article", adminOnly: false },
+        { href: "/imports", label: "Imports", icon: "upload_file", adminOnly: true },
+        { href: "/users", label: "Users", icon: "group", adminOnly: true },
     ];
 
     const handleLogout = async () => {
@@ -32,8 +34,11 @@ export function Sidebar() {
             <div className="flex h-full flex-col">
                 {/* Logo/Brand */}
                 <div className="border-b border-gray-800 p-6">
-                    <h1 className="text-xl font-bold text-white">Another Read</h1>
-                    <p className="mt-1 text-sm text-gray-400">Dashboard</p>
+                    <img
+                        src="/logo--extended--white.svg"
+                        alt="Another Read"
+                        className="h-16 w-auto"
+                    />
                 </div>
 
                 {/* Navigation */}
@@ -54,7 +59,7 @@ export function Sidebar() {
                                     : "text-gray-400 hover:bg-gray-900 hover:text-white"
                                     }`}
                             >
-                                <span className="text-lg">{item.icon}</span>
+                                <Icon name={item.icon} className="text-xl" />
                                 <span>{item.label}</span>
                             </Link>
                         );
@@ -73,6 +78,24 @@ export function Sidebar() {
                                 <span className="mt-2 inline-block rounded-full bg-blue-500/20 px-2 py-1 text-xs font-medium text-blue-400">
                                     {currentUser.userTier}
                                 </span>
+
+                                {/* Credit Balance */}
+                                <div className="mt-3 border-t border-gray-800 pt-3">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-400">Credits</span>
+                                        <span className="font-medium text-white">
+                                            {currentUser.creditsRemaining?.toLocaleString() ?? 0} / {currentUser.creditQuota?.toLocaleString() ?? 0}
+                                        </span>
+                                    </div>
+                                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all"
+                                            style={{
+                                                width: `${currentUser.creditQuota ? Math.min(100, ((currentUser.creditQuota - (currentUser.creditsUsed ?? 0)) / currentUser.creditQuota) * 100) : 0}%`
+                                            }}
+                                        ></div>
+                                    </div>
+                                </div>
                             </div>
                             <button
                                 onClick={handleLogout}

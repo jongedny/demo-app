@@ -64,6 +64,8 @@ export const users = createTable("user", {
   password: text("password").notNull(), // Hashed password
   userTier: text("user_tier").notNull().default("User"), // Admin, Marketer, or User
   status: text("status").notNull().default("Pending"), // Active, Closed, or Pending
+  creditQuota: integer("credit_quota").notNull().default(0), // Total credits allocated to user
+  creditsUsed: integer("credits_used").notNull().default(0), // Total credits consumed
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -73,5 +75,40 @@ export const passwordResetTokens = createTable("password_reset_token", {
   userId: integer("user_id").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const creditUsage = createTable("credit_usage", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  operation: text("operation").notNull(), // e.g., "daily_events", "content_generation"
+  tokensUsed: integer("tokens_used").notNull(), // Total tokens consumed
+  creditsDeducted: integer("credits_deducted").notNull(), // Credits deducted for this operation
+  metadata: text("metadata"), // JSON string with additional details
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const importLogs = createTable("import_log", {
+  id: serial("id").primaryKey(),
+  filename: text("filename").notNull(),
+  filepath: text("filepath").notNull(),
+  status: text("status").notNull(), // 'pending', 'processing', 'completed', 'failed'
+  totalBooks: integer("total_books").default(0),
+  importedBooks: integer("imported_books").default(0),
+  skippedBooks: integer("skipped_books").default(0),
+  errorCount: integer("error_count").default(0),
+  importSource: text("import_source"), // e.g., 'APONIX', 'Penguin'
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const importErrors = createTable("import_error", {
+  id: serial("id").primaryKey(),
+  importLogId: integer("import_log_id").notNull().references(() => importLogs.id),
+  bookIdentifier: text("book_identifier"), // ISBN or record reference
+  errorType: text("error_type").notNull(), // e.g., 'parse_error', 'validation_error', 'database_error'
+  errorMessage: text("error_message").notNull(),
+  errorDetails: text("error_details"), // JSON string with stack trace or additional context
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

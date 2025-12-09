@@ -21,6 +21,9 @@ export const adminRouter = createTRPCRouter({
             email: user.email,
             userTier: user.userTier,
             status: user.status,
+            creditQuota: user.creditQuota,
+            creditsUsed: user.creditsUsed,
+            creditsRemaining: user.creditQuota - user.creditsUsed,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         }));
@@ -38,6 +41,7 @@ export const adminRouter = createTRPCRouter({
                 password: z.string().min(8, "Password must be at least 8 characters"),
                 userTier: z.enum(["Admin", "Marketer", "User"]),
                 status: z.enum(["Active", "Closed", "Pending"]),
+                creditQuota: z.number().min(0, "Credit quota must be non-negative").optional().default(0),
             }),
         )
         .mutation(async ({ ctx, input }) => {
@@ -66,6 +70,7 @@ export const adminRouter = createTRPCRouter({
                     password: hashedPassword,
                     userTier: input.userTier as UserTier,
                     status: input.status as UserStatus,
+                    creditQuota: input.creditQuota,
                 })
                 .returning();
 
@@ -96,6 +101,7 @@ export const adminRouter = createTRPCRouter({
                 password: z.string().min(8, "Password must be at least 8 characters").optional(),
                 userTier: z.enum(["Admin", "Marketer", "User"]).optional(),
                 status: z.enum(["Active", "Closed", "Pending"]).optional(),
+                creditQuota: z.number().min(0, "Credit quota must be non-negative").optional(),
             }),
         )
         .mutation(async ({ ctx, input }) => {

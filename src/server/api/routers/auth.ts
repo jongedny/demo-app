@@ -164,6 +164,9 @@ export const authRouter = createTRPCRouter({
             email: user.email,
             userTier: user.userTier,
             status: user.status,
+            creditQuota: user.creditQuota,
+            creditsUsed: user.creditsUsed,
+            creditsRemaining: user.creditQuota - user.creditsUsed,
         };
     }),
 

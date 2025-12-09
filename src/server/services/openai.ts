@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { env } from "~/env";
 import { OPENAI_CONFIG } from "~/server/config/prompts";
+import { deductCredits, calculateCreditsFromTokens } from "~/server/services/credits";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -16,9 +17,10 @@ export interface DailyEvent {
 
 /**
  * Fetches daily UK events from OpenAI API
+ * @param userId - Optional user ID for credit tracking
  * @returns Array of event objects with name, keywords, and description
  */
-export async function fetchDailyUKEvents(): Promise<DailyEvent[]> {
+export async function fetchDailyUKEvents(userId?: number): Promise<DailyEvent[]> {
     const today = new Date();
     const dateString = today.toLocaleDateString("en-GB", {
         day: "numeric",
@@ -77,6 +79,28 @@ export async function fetchDailyUKEvents(): Promise<DailyEvent[]> {
 
         console.log(`[OpenAI Service] Fetched ${validEvents.length} events for ${dateString}:`, validEvents);
 
+        // Track credit usage if userId is provided
+        if (userId) {
+            const tokensUsed = (completion.usage?.total_tokens) || 0;
+            const creditsDeducted = calculateCreditsFromTokens(tokensUsed);
+
+            await deductCredits(
+                userId,
+                "daily_events",
+                tokensUsed,
+                creditsDeducted,
+                {
+                    model: config.model,
+                    promptTokens: completion.usage?.prompt_tokens,
+                    completionTokens: completion.usage?.completion_tokens,
+                    eventCount: validEvents.length,
+                    date: dateString,
+                }
+            );
+
+            console.log(`[OpenAI Service] Deducted ${creditsDeducted} credits from user ${userId}`);
+        }
+
         return validEvents;
     } catch (error) {
         console.error("[OpenAI Service] Error fetching events:", error);
@@ -97,13 +121,17 @@ export interface GeneratedContent {
  * @param eventDescription - Description of the event
  * @param eventKeywords - Array of keywords related to the event
  * @param relatedBooks - Array of related books with title, author, and description
+ * @param userId - Optional user ID for credit tracking
+ * @param eventId - Optional event ID for metadata
  * @returns Array of 4 generated content pieces with title and content
  */
 export async function generateEventContent(
     eventName: string,
     eventDescription: string | null,
     eventKeywords: string | null,
-    relatedBooks: Array<{ title: string; author: string; description: string | null }>
+    relatedBooks: Array<{ title: string; author: string; description: string | null }>,
+    userId?: number,
+    eventId?: number
 ): Promise<GeneratedContent[]> {
     const keywordsArray = eventKeywords ? eventKeywords.split(',').map(k => k.trim()) : [];
 
@@ -165,6 +193,29 @@ export async function generateEventContent(
             .slice(0, 4);
 
         console.log(`[OpenAI Service] Generated ${validContent.length} content pieces for event "${eventName}"`);
+
+        // Track credit usage if userId is provided
+        if (userId) {
+            const tokensUsed = (completion.usage?.total_tokens) || 0;
+            const creditsDeducted = calculateCreditsFromTokens(tokensUsed);
+
+            await deductCredits(
+                userId,
+                "content_generation",
+                tokensUsed,
+                creditsDeducted,
+                {
+                    model: config.model,
+                    promptTokens: completion.usage?.prompt_tokens,
+                    completionTokens: completion.usage?.completion_tokens,
+                    eventId,
+                    eventName,
+                    contentCount: validContent.length,
+                }
+            );
+
+            console.log(`[OpenAI Service] Deducted ${creditsDeducted} credits from user ${userId}`);
+        }
 
         return validContent;
     } catch (error) {

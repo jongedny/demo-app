@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "~/trpc/react";
+import { Icon } from "./icon";
 
 interface ContentListProps {
     eventId?: number;
@@ -34,7 +35,7 @@ export function ContentList({ eventId }: ContentListProps) {
         return (
             <div className="w-full">
                 <div className="rounded-lg border border-gray-800 bg-gray-900 p-12 text-center">
-                    <div className="mb-4 text-6xl">📝</div>
+                    <Icon name="article" className="text-6xl text-gray-600" />
                     <h3 className="mb-2 text-xl font-semibold text-gray-300">
                         No content yet
                     </h3>
@@ -135,12 +136,12 @@ function RelatedBooksInfo({ bookIds }: { bookIds: string }) {
                                     }}
                                 />
                                 <div className="hidden h-32 w-full items-center justify-center text-4xl">
-                                    📖
+                                    <Icon name="menu_book" className="text-4xl text-gray-600" />
                                 </div>
                             </div>
                         ) : (
                             <div className="mb-2 flex h-32 items-center justify-center rounded-md bg-gray-700 text-4xl">
-                                📖
+                                <Icon name="menu_book" className="text-4xl text-gray-600" />
                             </div>
                         )}
 

@@ -1,0 +1,12 @@
+# Ignore all files in imports directories
+incoming/*
+processed/*
+failed/*
+
+# Keep the directory structure
+!incoming/.gitkeep
+!processed/.gitkeep
+!failed/.gitkeep
+
+# Keep example files
+!incoming/example_*.xml

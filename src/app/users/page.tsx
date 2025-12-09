@@ -13,6 +13,7 @@ interface EditingUser {
     email: string;
     userTier: UserTier;
     status: UserStatus;
+    creditQuota: number;
     password?: string;
 }
 
@@ -26,6 +27,7 @@ export default function UserManagementPage() {
         password: "",
         userTier: "User" as UserTier,
         status: "Active" as UserStatus,
+        creditQuota: 0,
     });
 
     const utils = api.useUtils();
@@ -42,6 +44,7 @@ export default function UserManagementPage() {
                 password: "",
                 userTier: "User",
                 status: "Active",
+                creditQuota: 0,
             });
         },
     });
@@ -75,6 +78,7 @@ export default function UserManagementPage() {
             email?: string;
             userTier?: UserTier;
             status?: UserStatus;
+            creditQuota?: number;
             password?: string;
         } = {
             userId: editingUser.id,
@@ -83,6 +87,7 @@ export default function UserManagementPage() {
             email: editingUser.email,
             userTier: editingUser.userTier,
             status: editingUser.status,
+            creditQuota: editingUser.creditQuota,
         };
 
         if (editingUser.password) {
@@ -171,6 +176,9 @@ export default function UserManagementPage() {
                                     Status
                                 </th>
                                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
+                                    Credits
+                                </th>
+                                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">
                                     Created
                                 </th>
                                 <th className="px-6 py-4 text-right text-sm font-semibold text-gray-300">
@@ -203,6 +211,16 @@ export default function UserManagementPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-gray-400">
+                                        <div className="text-sm">
+                                            <div className="font-medium text-white">
+                                                {user.creditsRemaining?.toLocaleString() ?? 0} / {user.creditQuota?.toLocaleString() ?? 0}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                Used: {user.creditsUsed?.toLocaleString() ?? 0}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-gray-400">
                                         {new Date(user.createdAt).toLocaleDateString()}
                                     </td>
                                     <td className="px-6 py-4 text-right">
@@ -215,6 +233,7 @@ export default function UserManagementPage() {
                                                     email: user.email,
                                                     userTier: user.userTier as UserTier,
                                                     status: user.status as UserStatus,
+                                                    creditQuota: user.creditQuota ?? 0,
                                                 })
                                             }
                                             className="mr-2 text-blue-400 transition-colors hover:text-blue-300"
@@ -349,6 +368,24 @@ export default function UserManagementPage() {
                                 </select>
                             </div>
 
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-300">
+                                    Credit Quota
+                                </label>
+                                <input
+                                    type="number"
+                                    value={newUser.creditQuota}
+                                    onChange={(e) =>
+                                        setNewUser({ ...newUser, creditQuota: parseInt(e.target.value) || 0 })
+                                    }
+                                    min="0"
+                                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
+                                />
+                                <p className="mt-1 text-xs text-gray-400">
+                                    Total credits allocated to this user (1 credit ≈ 1000 tokens)
+                                </p>
+                            </div>
+
                             <div className="flex gap-4 pt-4">
                                 <button
                                     type="submit"
@@ -481,6 +518,24 @@ export default function UserManagementPage() {
                                     <option value="Pending">Pending</option>
                                     <option value="Closed">Closed</option>
                                 </select>
+                            </div>
+
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-gray-300">
+                                    Credit Quota
+                                </label>
+                                <input
+                                    type="number"
+                                    value={editingUser.creditQuota}
+                                    onChange={(e) =>
+                                        setEditingUser({ ...editingUser, creditQuota: parseInt(e.target.value) || 0 })
+                                    }
+                                    min="0"
+                                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
+                                />
+                                <p className="mt-1 text-xs text-gray-400">
+                                    Total credits allocated to this user (1 credit ≈ 1000 tokens)
+                                </p>
                             </div>
 
                             <div className="flex gap-4 pt-4">

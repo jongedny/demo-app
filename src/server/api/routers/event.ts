@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq, or, like, sql } from "drizzle-orm";
 
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
 import { events, books, eventBooks, content } from "~/server/db/schema";
 import { generateEventContent } from "~/server/services/openai";
 
@@ -171,7 +171,7 @@ export const eventRouter = createTRPCRouter({
             return relatedBooks;
         }),
 
-    suggestContent: publicProcedure
+    suggestContent: protectedProcedure
         .input(z.object({ eventId: z.number() }))
         .mutation(async ({ ctx, input }) => {
             // Get the event
@@ -259,7 +259,9 @@ export const eventRouter = createTRPCRouter({
                     title: b.title,
                     author: b.author,
                     description: b.description,
-                }))
+                })),
+                ctx.user.userId, // Pass userId for credit tracking
+                input.eventId // Pass eventId for metadata
             );
 
             // Store the generated content

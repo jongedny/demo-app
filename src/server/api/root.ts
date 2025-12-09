@@ -3,6 +3,7 @@ import { bookRouter } from "~/server/api/routers/book";
 import { contentRouter } from "~/server/api/routers/content";
 import { authRouter } from "~/server/api/routers/auth";
 import { adminRouter } from "~/server/api/routers/admin";
+import { importRouter } from "~/server/api/routers/importRouter";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -16,6 +17,7 @@ export const appRouter = createTRPCRouter({
   content: contentRouter,
   auth: authRouter,
   admin: adminRouter,
+  import: importRouter,
 });
 
 // export type definition of API

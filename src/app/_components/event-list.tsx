@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "~/trpc/react";
+import { Icon } from "./icon";
 
 export function EventList() {
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -62,7 +63,7 @@ export function EventList() {
         return (
             <div className="w-full">
                 <div className="rounded-lg border border-gray-800 bg-gray-900 p-12 text-center">
-                    <div className="mb-4 text-6xl">📅</div>
+                    <Icon name="event" className="text-6xl text-gray-600" />
                     <h3 className="mb-2 text-xl font-semibold text-gray-300">
                         No events yet
                     </h3>
@@ -93,7 +94,7 @@ export function EventList() {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4 flex-1">
                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-xl">
-                                    🎉
+                                    <Icon name="celebration" className="text-xl" />
                                 </div>
                                 <div className="flex-1">
                                     {editingId === event.id ? (
@@ -241,7 +242,10 @@ function EventActions({ eventId }: { eventId: number }) {
                             Finding...
                         </span>
                     ) : (
-                        '📚 Related Books'
+                        <span className="flex items-center gap-1.5">
+                            <Icon name="menu_book" className="text-base" />
+                            Related Books
+                        </span>
                     )}
                 </button>
                 <button
@@ -255,14 +259,20 @@ function EventActions({ eventId }: { eventId: number }) {
                             Generating...
                         </span>
                     ) : (
-                        '✨ Suggest Content'
+                        <span className="flex items-center gap-1.5">
+                            <Icon name="auto_awesome" className="text-base" />
+                            Suggest Content
+                        </span>
                     )}
                 </button>
                 <a
                     href={`/content?eventId=${eventId}`}
                     className="rounded-lg bg-green-500/20 px-3 py-1.5 text-sm text-green-400 transition-colors hover:bg-green-500/30"
                 >
-                    👁️ View Content
+                    <span className="flex items-center gap-1.5">
+                        <Icon name="visibility" className="text-base" />
+                        View Content
+                    </span>
                 </a>
             </div>
             {message && (
