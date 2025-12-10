@@ -18,6 +18,7 @@ export function Sidebar() {
         { href: "/content", label: "Content", icon: "article", adminOnly: false },
         { href: "/imports", label: "Imports", icon: "upload_file", adminOnly: true },
         { href: "/users", label: "Users", icon: "group", adminOnly: true },
+        { href: "/api-keys", label: "API Keys", icon: "key", adminOnly: true },
     ];
 
     const handleLogout = async () => {

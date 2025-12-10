@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
-import { users } from "~/server/db/schema";
+import { users, apiKeys } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword, type UserTier, type UserStatus } from "~/server/auth";
 import { TRPCError } from "@trpc/server";
+import { generateApiKey, hashApiKey } from "~/server/api-key";
 
 export const adminRouter = createTRPCRouter({
     /**
@@ -204,6 +205,150 @@ export const adminRouter = createTRPCRouter({
             return {
                 success: true,
                 message: "User deleted successfully",
+            };
+        }),
+
+    /**
+     * Get all API keys (Admin only)
+     */
+    getAllApiKeys: adminProcedure.query(async ({ ctx }) => {
+        const allKeys = await ctx.db.query.apiKeys.findMany({
+            orderBy: (apiKeys, { desc }) => [desc(apiKeys.createdAt)],
+        });
+
+        // Don't return the actual key hash for security
+        return allKeys.map((key) => ({
+            id: key.id,
+            name: key.name,
+            userId: key.userId,
+            status: key.status,
+            lastUsedAt: key.lastUsedAt,
+            usageCount: key.usageCount,
+            createdAt: key.createdAt,
+            updatedAt: key.updatedAt,
+        }));
+    }),
+
+    /**
+     * Create a new API key (Admin only)
+     */
+    createApiKey: adminProcedure
+        .input(
+            z.object({
+                name: z.string().min(1, "Name is required"),
+                userId: z.number().optional(),
+            }),
+        )
+        .mutation(async ({ ctx, input }) => {
+            // If userId is provided, verify the user exists
+            if (input.userId) {
+                const user = await ctx.db.query.users.findFirst({
+                    where: eq(users.id, input.userId),
+                });
+
+                if (!user) {
+                    throw new TRPCError({
+                        code: "NOT_FOUND",
+                        message: "User not found",
+                    });
+                }
+            }
+
+            // Generate new API key
+            const plainKey = generateApiKey();
+            const hashedKey = hashApiKey(plainKey);
+
+            // Store hashed key in database
+            const [newKey] = await ctx.db
+                .insert(apiKeys)
+                .values({
+                    key: hashedKey,
+                    name: input.name,
+                    userId: input.userId,
+                    status: "active",
+                })
+                .returning();
+
+            return {
+                success: true,
+                message: "API key created successfully",
+                // Return the plain key ONLY on creation - it won't be shown again
+                apiKey: plainKey,
+                keyInfo: {
+                    id: newKey!.id,
+                    name: newKey!.name,
+                    userId: newKey!.userId,
+                    status: newKey!.status,
+                    createdAt: newKey!.createdAt,
+                },
+            };
+        }),
+
+    /**
+     * Revoke an API key (Admin only)
+     */
+    revokeApiKey: adminProcedure
+        .input(
+            z.object({
+                keyId: z.number(),
+            }),
+        )
+        .mutation(async ({ ctx, input }) => {
+            // Check if key exists
+            const existingKey = await ctx.db.query.apiKeys.findFirst({
+                where: eq(apiKeys.id, input.keyId),
+            });
+
+            if (!existingKey) {
+                throw new TRPCError({
+                    code: "NOT_FOUND",
+                    message: "API key not found",
+                });
+            }
+
+            // Update key status to revoked
+            await ctx.db
+                .update(apiKeys)
+                .set({
+                    status: "revoked",
+                    updatedAt: new Date(),
+                })
+                .where(eq(apiKeys.id, input.keyId));
+
+            return {
+                success: true,
+                message: "API key revoked successfully",
+            };
+        }),
+
+    /**
+     * Delete an API key (Admin only)
+     */
+    deleteApiKey: adminProcedure
+        .input(
+            z.object({
+                keyId: z.number(),
+            }),
+        )
+        .mutation(async ({ ctx, input }) => {
+            // Check if key exists
+            const existingKey = await ctx.db.query.apiKeys.findFirst({
+                where: eq(apiKeys.id, input.keyId),
+            });
+
+            if (!existingKey) {
+                throw new TRPCError({
+                    code: "NOT_FOUND",
+                    message: "API key not found",
+                });
+            }
+
+            // Delete key
+            await ctx.db.delete(apiKeys).where(eq(apiKeys.id, input.keyId));
+
+            return {
+                success: true,
+                message: "API key deleted successfully",
             };
         }),
 });

@@ -112,3 +112,15 @@ export const importErrors = createTable("import_error", {
   errorDetails: text("error_details"), // JSON string with stack trace or additional context
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const apiKeys = createTable("api_key", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(), // The actual API key (hashed)
+  name: text("name").notNull(), // Friendly name for the key
+  userId: integer("user_id").references(() => users.id), // Optional: associate with a user
+  status: text("status").notNull().default("active"), // 'active' or 'revoked'
+  lastUsedAt: timestamp("last_used_at"),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
