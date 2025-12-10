@@ -20,13 +20,11 @@ API keys follow the format: `ar_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
 ## Endpoints
 
-### Get Content
+### Get Content (REST API - Recommended for Postman)
 
-Retrieve content with pagination support.
+Retrieve content with pagination support using a simple REST API.
 
-**Endpoint:** `api.getContent`
-
-**Method:** Query
+**Endpoint:** `GET /api/content`
 
 **Parameters:**
 
@@ -35,6 +33,78 @@ Retrieve content with pagination support.
 | apiKey    | string | Yes      | Your API key                          |
 | limit     | number | No       | Number of items to return (1-100, default: 50) |
 | offset    | number | No       | Number of items to skip (default: 0)  |
+
+**Example Request (Postman):**
+
+```
+Method: GET
+URL: https://demo-app-kohl-eight.vercel.app/api/content?apiKey=ar_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&limit=10&offset=0
+```
+
+**Example Request (cURL):**
+
+```bash
+curl "https://demo-app-kohl-eight.vercel.app/api/content?apiKey=ar_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&limit=10&offset=0"
+```
+
+**Example Request (JavaScript/Fetch):**
+
+```javascript
+const response = await fetch(
+  'https://demo-app-kohl-eight.vercel.app/api/content?apiKey=ar_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&limit=10&offset=0'
+);
+const data = await response.json();
+console.log(data);
+```
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "eventId": 5,
+      "title": "Sample Content Title",
+      "content": "Content body text...",
+      "relatedBookIds": "[1, 2, 3]",
+      "createdAt": "2025-12-10T16:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "limit": 10,
+    "offset": 0,
+    "count": 10
+  }
+}
+```
+
+**Error Response (401 - Invalid API Key):**
+
+```json
+{
+  "success": false,
+  "error": "Invalid API key",
+  "message": "The provided API key is not valid"
+}
+```
+
+**Error Response (403 - Revoked API Key):**
+
+```json
+{
+  "success": false,
+  "error": "API key revoked",
+  "message": "This API key has been revoked"
+}
+```
+
+### Get Content (tRPC - For TypeScript Applications)
+
+If you're using a TypeScript application with tRPC client, you can also use the tRPC endpoint.
+
+**Endpoint:** `api.getContent`
 
 **Example Request (tRPC):**
 
