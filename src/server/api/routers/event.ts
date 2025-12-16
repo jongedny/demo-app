@@ -4,6 +4,7 @@ import { eq, or, like, sql } from "drizzle-orm";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
 import { events, books, eventBooks, content } from "~/server/db/schema";
 import { generateEventContent } from "~/server/services/openai";
+import { processEventRelatedBooks } from "~/server/services/events";
 
 export const eventRouter = createTRPCRouter({
     create: publicProcedure
@@ -14,12 +15,31 @@ export const eventRouter = createTRPCRouter({
             eventDate: z.date().optional(),
         }))
         .mutation(async ({ ctx, input }) => {
-            await ctx.db.insert(events).values({
+            // Insert the event and get the created record
+            const [createdEvent] = await ctx.db.insert(events).values({
                 name: input.name,
                 keywords: input.keywords,
                 description: input.description,
                 eventDate: input.eventDate,
-            });
+            }).returning();
+
+            // Automatically find related books and generate AI reviews
+            if (createdEvent) {
+                try {
+                    const { booksFound, reviewsGenerated } = await processEventRelatedBooks(
+                        createdEvent.id,
+                        createdEvent.name,
+                        createdEvent.keywords,
+                        createdEvent.description
+                    );
+                    console.log(`[Event Create] Found ${booksFound} related books and generated ${reviewsGenerated} AI reviews for event "${createdEvent.name}"`);
+                } catch (error) {
+                    console.error(`[Event Create] Error processing related books for event ${createdEvent.id}:`, error);
+                    // Don't fail the event creation if book processing fails
+                }
+            }
+
+            return createdEvent;
         }),
 
     createBulk: publicProcedure

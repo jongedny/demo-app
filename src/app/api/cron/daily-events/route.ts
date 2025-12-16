@@ -1,75 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchDailyUKEvents, reviewBookRecommendations } from "~/server/services/openai";
+import { fetchDailyUKEvents } from "~/server/services/openai";
+import { processEventRelatedBooks } from "~/server/services/events";
 import { db } from "~/server/db";
-import { events, books, eventBooks } from "~/server/db/schema";
+import { events } from "~/server/db/schema";
 import { env } from "~/env";
-import { eq } from "drizzle-orm";
-
-/**
- * Helper function to find and store related books for an event
- * @param eventId - The ID of the event
- * @param keywords - Comma-separated keywords
- * @param description - Event description
- * @returns Number of books found
- */
-async function findRelatedBooksForEvent(
-    eventId: number,
-    keywords: string | null,
-    description: string | null
-): Promise<number> {
-    // Parse event keywords
-    const eventKeywords = keywords
-        ? keywords.split(',').map(k => k.trim().toLowerCase())
-        : [];
-
-    if (eventKeywords.length === 0 && !description) {
-        return 0;
-    }
-
-    // Find matching books
-    const allBooks = await db.query.books.findMany();
-
-    const matchedBooks = allBooks
-        .map(book => {
-            let score = 0;
-            const searchText = `${book.title} ${book.description || ''} ${book.keywords || ''}`.toLowerCase();
-
-            // Check each event keyword
-            eventKeywords.forEach(keyword => {
-                if (searchText.includes(keyword)) {
-                    score += 10;
-                }
-            });
-
-            // Check event description words
-            if (description) {
-                const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-                descWords.forEach(word => {
-                    if (searchText.includes(word)) {
-                        score += 2;
-                    }
-                });
-            }
-
-            return { book, score };
-        })
-        .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10); // Limit to top 10 matches
-
-    // Store the relationships
-    if (matchedBooks.length > 0) {
-        await db.insert(eventBooks).values(
-            matchedBooks.map(({ book, score }) => ({
-                eventId: eventId,
-                bookId: book.id,
-                matchScore: score,
-            }))
-        );
-    }
-
-    return matchedBooks.length;
-}
 
 
 /**
@@ -119,7 +53,7 @@ export async function GET(request: NextRequest) {
         }));
         const insertedEvents = await db.insert(events).values(values).returning();
 
-        console.log(`[Cron API] Successfully saved ${dailyEvents.length} events:`, dailyEvents);
+        console.log(`[Cron API] Successfully saved ${dailyEvents.length} events: `, dailyEvents);
 
         // Automatically find related books for events happening today
         // Filter to only process events with today's date
@@ -142,53 +76,15 @@ export async function GET(request: NextRequest) {
 
         for (const event of todaysEvents) {
             try {
-                const booksFound = await findRelatedBooksForEvent(event.id, event.keywords, event.description);
+                const { booksFound, reviewsGenerated } = await processEventRelatedBooks(
+                    event.id,
+                    event.name,
+                    event.keywords,
+                    event.description
+                );
                 totalBooksFound += booksFound;
-                console.log(`[Cron API] Found ${booksFound} related books for event "${event.name}"`);
-
-                // If books were found, get AI reviews for them
-                if (booksFound > 0) {
-                    // Fetch the related books with their details
-                    const relatedBookRecords = await db.query.eventBooks.findMany({
-                        where: eq(eventBooks.eventId, event.id),
-                    });
-
-                    if (relatedBookRecords.length > 0) {
-                        const bookIds = relatedBookRecords.map(r => r.bookId);
-                        const bookDetails = await db.query.books.findMany({
-                            where: (books, { inArray }) => inArray(books.id, bookIds),
-                        });
-
-                        // Get AI reviews for the books (max 20)
-                        const reviews = await reviewBookRecommendations(
-                            event.name,
-                            bookDetails.map(b => ({
-                                title: b.title,
-                                author: b.author,
-                                description: b.description,
-                            }))
-                        );
-
-                        // Update the eventBooks records with AI scores and explanations
-                        for (const review of reviews) {
-                            const matchingBook = bookDetails.find(b => b.title === review.bookTitle);
-                            if (matchingBook) {
-                                const eventBookRecord = relatedBookRecords.find(r => r.bookId === matchingBook.id);
-                                if (eventBookRecord) {
-                                    await db.update(eventBooks)
-                                        .set({
-                                            aiScore: review.score,
-                                            aiExplanation: review.explanation,
-                                        })
-                                        .where(eq(eventBooks.id, eventBookRecord.id));
-                                    totalReviewsGenerated++;
-                                }
-                            }
-                        }
-
-                        console.log(`[Cron API] Generated ${reviews.length} AI reviews for event "${event.name}"`);
-                    }
-                }
+                totalReviewsGenerated += reviewsGenerated;
+                console.log(`[Cron API] Found ${booksFound} related books and generated ${reviewsGenerated} AI reviews for event "${event.name}"`);
             } catch (error) {
                 console.error(`[Cron API] Error processing books for event ${event.id}:`, error);
                 // Continue with other events even if one fails
@@ -197,7 +93,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            message: `Successfully saved ${dailyEvents.length} events (${todaysEvents.length} for today), found ${totalBooksFound} related books, and generated ${totalReviewsGenerated} AI reviews`,
+            message: `Successfully saved ${dailyEvents.length} events(${todaysEvents.length} for today), found ${totalBooksFound} related books, and generated ${totalReviewsGenerated} AI reviews`,
             count: dailyEvents.length,
             todaysEventCount: todaysEvents.length,
             events: dailyEvents,
