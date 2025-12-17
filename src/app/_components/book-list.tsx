@@ -29,6 +29,19 @@ export function BookList({ eventId }: { eventId?: number }) {
         }
     );
 
+    // Fetch event-book relationships with AI scores when filtering by event
+    const { data: eventBooks } = api.event.getEventBooksWithScores.useQuery(
+        { eventId: eventId! },
+        {
+            enabled: !!eventId,
+        }
+    );
+
+    // Create a map of bookId to AI score/explanation
+    const aiScoreMap = new Map(
+        eventBooks?.map(eb => [eb.bookId, { score: eb.aiScore, explanation: eb.aiExplanation }]) ?? []
+    );
+
     const books = eventId ? relatedBooks : allBooks;
     const isLoading = eventId ? isLoadingRelated : isLoadingAll;
 
@@ -131,132 +144,175 @@ export function BookList({ eventId }: { eventId?: number }) {
             {/* Books Grid View */}
             {viewMode === "grid" && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {books.map((book) => (
-                        <a
-                            key={book.id}
-                            href={`/books/${book.id}`}
-                            className="group rounded-lg border border-gray-800 bg-gray-900 p-5 transition-all hover:border-gray-700 hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer"
-                        >
-                            {/* Book Jacket Thumbnail */}
-                            {book.isbn ? (
-                                <div className="mb-4 overflow-hidden rounded-lg bg-gray-800">
-                                    <img
-                                        src={`https://cdn.anotherread.com/jackets/${book.isbn}.jpg`}
-                                        alt={`${book.title} book cover`}
-                                        className="h-64 w-full object-cover transition-transform group-hover:scale-105"
-                                        onError={(e) => {
-                                            // Fallback to book icon if image fails to load
-                                            const target = e.target as HTMLImageElement;
-                                            target.style.display = 'none';
-                                            const fallback = target.nextElementSibling as HTMLElement;
-                                            if (fallback) fallback.style.display = 'flex';
-                                        }}
-                                    />
-                                    <div className="hidden h-64 w-full items-center justify-center text-6xl">
+                    {books.map((book) => {
+                        const aiData = eventId ? aiScoreMap.get(book.id) : undefined;
+                        return (
+                            <a
+                                key={book.id}
+                                href={`/books/${book.id}`}
+                                className="group rounded-lg border border-gray-800 bg-gray-900 p-5 transition-all hover:border-gray-700 hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer"
+                            >
+                                {/* Book Jacket Thumbnail */}
+                                {book.isbn ? (
+                                    <div className="mb-4 overflow-hidden rounded-lg bg-gray-800">
+                                        <img
+                                            src={`https://cdn.anotherread.com/jackets/${book.isbn}.jpg`}
+                                            alt={`${book.title} book cover`}
+                                            className="h-64 w-full object-cover transition-transform group-hover:scale-105"
+                                            onError={(e) => {
+                                                // Fallback to book icon if image fails to load
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) fallback.style.display = 'flex';
+                                            }}
+                                        />
+                                        <div className="hidden h-64 w-full items-center justify-center text-6xl">
+                                            <Icon name="menu_book" className="text-6xl text-gray-600" />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="mb-4 flex h-64 items-center justify-center rounded-lg bg-gray-800 text-6xl">
                                         <Icon name="menu_book" className="text-6xl text-gray-600" />
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="mb-4 flex h-64 items-center justify-center rounded-lg bg-gray-800 text-6xl">
-                                    <Icon name="menu_book" className="text-6xl text-gray-600" />
-                                </div>
-                            )}
-
-                            <div className="mb-4 flex items-start justify-between">
-                                {book.price && (
-                                    <span className="rounded-full bg-green-500/20 px-3 py-1 text-sm font-semibold text-green-400">
-                                        £{book.price}
-                                    </span>
                                 )}
-                            </div>
 
-                            <h3 className="mb-2 line-clamp-2 text-base font-medium text-white">
-                                {book.title}
-                            </h3>
+                                <div className="mb-4 flex items-start justify-between gap-2">
+                                    {book.price && (
+                                        <span className="rounded-full bg-green-500/20 px-3 py-1 text-sm font-semibold text-green-400">
+                                            £{book.price}
+                                        </span>
+                                    )}
+                                    {aiData?.score !== null && aiData?.score !== undefined && (
+                                        <span
+                                            className={`rounded-full px-2.5 py-1 text-sm font-semibold ${aiData.score >= 8
+                                                ? 'bg-green-500/20 text-green-400'
+                                                : aiData.score >= 5
+                                                    ? 'bg-blue-500/20 text-blue-400'
+                                                    : 'bg-gray-500/20 text-gray-400'
+                                                }`}
+                                        >
+                                            AI: {aiData.score}/10
+                                        </span>
+                                    )}
+                                </div>
 
-                            <p className="mb-3 text-sm text-gray-400">
-                                by {book.author}
-                            </p>
+                                <h3 className="mb-2 line-clamp-2 text-base font-medium text-white">
+                                    {book.title}
+                                </h3>
 
-                            {book.description && (
-                                <p className="mb-4 line-clamp-3 text-sm text-gray-500">
-                                    {book.description.replace(/<[^>]*>/g, '')}
+                                <p className="mb-3 text-sm text-gray-400">
+                                    by {book.author}
                                 </p>
-                            )}
 
-                            <div className="flex flex-wrap gap-2">
-                                {book.isbn && (
-                                    <span className="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-500">
-                                        ISBN: {book.isbn}
-                                    </span>
+                                {aiData?.explanation && (
+                                    <p className="mb-3 text-xs text-gray-500 leading-relaxed line-clamp-3">
+                                        {aiData.explanation}
+                                    </p>
                                 )}
-                                {book.status && (
-                                    <span className={`rounded-md px-2 py-1 text-xs ${book.status === 'active'
-                                        ? 'bg-green-500/20 text-green-400'
-                                        : 'bg-gray-800 text-gray-500'
-                                        }`}>
-                                        {book.status}
-                                    </span>
+
+                                {book.description && !aiData?.explanation && (
+                                    <p className="mb-4 line-clamp-3 text-sm text-gray-500">
+                                        {book.description.replace(/<[^>]*>/g, '')}
+                                    </p>
                                 )}
-                            </div>
-                        </a>
-                    ))}
+
+                                <div className="flex flex-wrap gap-2">
+                                    {book.isbn && (
+                                        <span className="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-500">
+                                            ISBN: {book.isbn}
+                                        </span>
+                                    )}
+                                    {book.status && (
+                                        <span className={`rounded-md px-2 py-1 text-xs ${book.status === 'active'
+                                            ? 'bg-green-500/20 text-green-400'
+                                            : 'bg-gray-800 text-gray-500'
+                                            }`}>
+                                            {book.status}
+                                        </span>
+                                    )}
+                                </div>
+                            </a>
+                        );
+                    })}
                 </div>
             )}
 
             {/* Books List View */}
             {viewMode === "list" && (
                 <div className="space-y-2">
-                    {books.map((book) => (
-                        <a
-                            key={book.id}
-                            href={`/books/${book.id}`}
-                            className="group block rounded-lg border border-gray-800 bg-gray-900 p-4 transition-all hover:border-gray-700 hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer"
-                        >
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-start gap-3 mb-2">
-                                        <Icon name="menu_book" className="text-2xl text-gray-600 flex-shrink-0 mt-1" />
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-base font-medium text-white mb-1">
-                                                {book.title}
-                                            </h3>
-                                            <p className="text-sm text-gray-400 mb-2">
-                                                by {book.author}
-                                            </p>
-                                            {book.description && (
-                                                <p className="line-clamp-2 text-sm text-gray-500">
-                                                    {book.description.replace(/<[^>]*>/g, '')}
+                    {books.map((book) => {
+                        const aiData = eventId ? aiScoreMap.get(book.id) : undefined;
+                        return (
+                            <a
+                                key={book.id}
+                                href={`/books/${book.id}`}
+                                className="group block rounded-lg border border-gray-800 bg-gray-900 p-4 transition-all hover:border-gray-700 hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer"
+                            >
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-start gap-3 mb-2">
+                                            <Icon name="menu_book" className="text-2xl text-gray-600 flex-shrink-0 mt-1" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-start justify-between gap-2 mb-1">
+                                                    <h3 className="text-base font-medium text-white">
+                                                        {book.title}
+                                                    </h3>
+                                                    {aiData?.score !== null && aiData?.score !== undefined && (
+                                                        <span
+                                                            className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${aiData.score >= 8
+                                                                    ? 'bg-green-500/20 text-green-400'
+                                                                    : aiData.score >= 5
+                                                                        ? 'bg-blue-500/20 text-blue-400'
+                                                                        : 'bg-gray-500/20 text-gray-400'
+                                                                }`}
+                                                        >
+                                                            AI: {aiData.score}/10
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm text-gray-400 mb-2">
+                                                    by {book.author}
                                                 </p>
+                                                {aiData?.explanation && (
+                                                    <p className="text-xs text-gray-500 leading-relaxed mb-2">
+                                                        {aiData.explanation}
+                                                    </p>
+                                                )}
+                                                {book.description && !aiData?.explanation && (
+                                                    <p className="line-clamp-2 text-sm text-gray-500">
+                                                        {book.description.replace(/<[^>]*>/g, '')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            {book.isbn && (
+                                                <span className="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-500">
+                                                    ISBN: {book.isbn}
+                                                </span>
+                                            )}
+                                            {book.status && (
+                                                <span className={`rounded-md px-2 py-1 text-xs ${book.status === 'active'
+                                                    ? 'bg-green-500/20 text-green-400'
+                                                    : 'bg-gray-800 text-gray-500'
+                                                    }`}>
+                                                    {book.status}
+                                                </span>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-wrap gap-2 mt-3">
-                                        {book.isbn && (
-                                            <span className="rounded-md bg-gray-800 px-2 py-1 text-xs text-gray-500">
-                                                ISBN: {book.isbn}
-                                            </span>
-                                        )}
-                                        {book.status && (
-                                            <span className={`rounded-md px-2 py-1 text-xs ${book.status === 'active'
-                                                ? 'bg-green-500/20 text-green-400'
-                                                : 'bg-gray-800 text-gray-500'
-                                                }`}>
-                                                {book.status}
-                                            </span>
-                                        )}
-                                    </div>
+                                    {book.price && (
+                                        <span className="rounded-full bg-green-500/20 px-3 py-1 text-sm font-semibold text-green-400 flex-shrink-0">
+                                            £{book.price}
+                                        </span>
+                                    )}
                                 </div>
-
-                                {book.price && (
-                                    <span className="rounded-full bg-green-500/20 px-3 py-1 text-sm font-semibold text-green-400 flex-shrink-0">
-                                        £{book.price}
-                                    </span>
-                                )}
-                            </div>
-                        </a>
-                    ))}
+                            </a>
+                        );
+                    })}
                 </div>
             )}
 

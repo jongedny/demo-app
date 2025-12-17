@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "~/trpc/react";
 import { Icon } from "./icon";
 
@@ -10,6 +10,7 @@ export function EventList() {
     const [editKeywords, setEditKeywords] = useState("");
     const [editDescription, setEditDescription] = useState("");
     const [editEventDate, setEditEventDate] = useState("");
+    const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
 
     const utils = api.useUtils();
     const { data: events, isLoading } = api.event.getAll.useQuery();
@@ -51,6 +52,82 @@ export function EventList() {
         setEditEventDate("");
     };
 
+    // Group events by month (must be before conditional returns)
+    const eventsByMonth = useMemo(() => {
+        if (!events || events.length === 0) return [];
+
+        const monthGroups = events.reduce((groups, event) => {
+            const date = event.eventDate ? new Date(event.eventDate) : null;
+            const monthKey = date
+                ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+                : 'no-date';
+
+            if (!groups[monthKey]) {
+                groups[monthKey] = {
+                    monthKey,
+                    displayName: date
+                        ? date.toLocaleDateString("en-US", { year: "numeric", month: "long" })
+                        : "No Date Set",
+                    sortDate: date ? date.getTime() : 0,
+                    events: [],
+                };
+            }
+            groups[monthKey]!.events.push(event);
+            return groups;
+        }, {} as Record<string, { monthKey: string; displayName: string; sortDate: number; events: typeof events }>);
+
+        // Sort months (most recent first)
+        return Object.values(monthGroups).sort((a, b) => {
+            if (a.monthKey === 'no-date') return 1;
+            if (b.monthKey === 'no-date') return -1;
+            return b.sortDate - a.sortDate;
+        });
+    }, [events]);
+
+    // Get current month's data
+    const currentMonth = eventsByMonth[currentMonthIndex];
+
+    // Group events within the current month by date
+    const groupedEvents = useMemo(() => {
+        if (!currentMonth) return [];
+
+        const dateGroups = currentMonth.events.reduce((groups, event) => {
+            const dateKey = event.eventDate
+                ? new Date(event.eventDate).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                })
+                : "No Date Set";
+
+            if (!groups[dateKey]) {
+                groups[dateKey] = [];
+            }
+            groups[dateKey]!.push(event);
+            return groups;
+        }, {} as Record<string, typeof currentMonth.events>);
+
+        // Sort groups by date (most recent first)
+        return Object.entries(dateGroups).sort(([dateA], [dateB]) => {
+            if (dateA === "No Date Set") return 1;
+            if (dateB === "No Date Set") return -1;
+            return new Date(dateB).getTime() - new Date(dateA).getTime();
+        });
+    }, [currentMonth]);
+
+    const handlePreviousMonth = () => {
+        if (currentMonthIndex < eventsByMonth.length - 1) {
+            setCurrentMonthIndex(currentMonthIndex + 1);
+        }
+    };
+
+    const handleNextMonth = () => {
+        if (currentMonthIndex > 0) {
+            setCurrentMonthIndex(currentMonthIndex - 1);
+        }
+    };
+
+    // Conditional returns AFTER all hooks
     if (isLoading) {
         return (
             <div className="w-full">
@@ -80,42 +157,55 @@ export function EventList() {
         );
     }
 
-    // Group events by event date
-    const groupedEvents = events.reduce((groups, event) => {
-        const dateKey = event.eventDate
-            ? new Date(event.eventDate).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-            })
-            : "No Date Set";
-
-        if (!groups[dateKey]) {
-            groups[dateKey] = [];
-        }
-        groups[dateKey]!.push(event);
-        return groups;
-    }, {} as Record<string, typeof events>);
-
-    // Sort groups by date (most recent first)
-    const sortedGroups = Object.entries(groupedEvents).sort(([dateA], [dateB]) => {
-        if (dateA === "No Date Set") return 1;
-        if (dateB === "No Date Set") return -1;
-        return new Date(dateB).getTime() - new Date(dateA).getTime();
-    });
+    if (!currentMonth) {
+        return (
+            <div className="w-full">
+                <div className="rounded-lg border border-gray-800 bg-gray-900 p-12 text-center">
+                    <Icon name="event" className="text-6xl text-gray-600" />
+                    <h3 className="mb-2 text-xl font-semibold text-gray-300">
+                        No events for this month
+                    </h3>
+                    <p className="text-gray-500">
+                        Try navigating to a different month or create a new event!
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full">
-            <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">
-                    All Events
-                </h2>
-                <span className="rounded-full bg-gray-800 px-3 py-1 text-sm text-gray-400">
-                    {events.length} {events.length === 1 ? "event" : "events"}
-                </span>
+            {/* Month Navigation */}
+            <div className="mb-6 flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 p-4">
+                <button
+                    onClick={handlePreviousMonth}
+                    disabled={currentMonthIndex >= eventsByMonth.length - 1}
+                    className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                >
+                    <Icon name="chevron_left" className="text-lg" />
+                    Previous
+                </button>
+                <div className="text-center">
+                    <h2 className="text-xl font-semibold text-white">
+                        {currentMonth.displayName}
+                    </h2>
+                    <p className="text-sm text-gray-400">
+                        {currentMonth.events.length} {currentMonth.events.length === 1 ? "event" : "events"}
+                    </p>
+                </div>
+                <button
+                    onClick={handleNextMonth}
+                    disabled={currentMonthIndex <= 0}
+                    className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                >
+                    Next
+                    <Icon name="chevron_right" className="text-lg" />
+                </button>
             </div>
+
+            {/* Events grouped by date */}
             <div className="space-y-8">
-                {sortedGroups.map(([dateKey, groupEvents]) => (
+                {groupedEvents.map(([dateKey, groupEvents]) => (
                     <div key={dateKey}>
                         <h2 className="text-lg font-semibold text-white mb-4">
                             {dateKey}

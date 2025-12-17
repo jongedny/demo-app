@@ -87,7 +87,7 @@ export function ContentList({ eventId }: ContentListProps) {
                         </div>
                         {item.relatedBookIds && (
                             <div className="mt-4 pt-4 border-t border-gray-800">
-                                <RelatedBooksInfo bookIds={item.relatedBookIds} />
+                                <RelatedBooksInfo bookIds={item.relatedBookIds} eventId={item.eventId} />
                             </div>
                         )}
                     </div>
@@ -97,7 +97,7 @@ export function ContentList({ eventId }: ContentListProps) {
     );
 }
 
-function RelatedBooksInfo({ bookIds }: { bookIds: string }) {
+function RelatedBooksInfo({ bookIds, eventId }: { bookIds: string; eventId: number }) {
     const ids = JSON.parse(bookIds) as number[];
     // Fetch only the specific books we need by their IDs
     const { data: relatedBooks } = api.book.getByIds.useQuery(
@@ -105,57 +105,91 @@ function RelatedBooksInfo({ bookIds }: { bookIds: string }) {
         { enabled: ids.length > 0 }
     );
 
+    // Fetch event-book relationships to get AI scores
+    const { data: eventBooks } = api.event.getEventBooksWithScores.useQuery(
+        { eventId },
+        { enabled: !!eventId }
+    );
+
     if (!relatedBooks || relatedBooks.length === 0) {
         return null;
     }
 
+    // Create a map of bookId to AI score/explanation
+    const aiScoreMap = new Map(
+        eventBooks?.map(eb => [eb.bookId, { score: eb.aiScore, explanation: eb.aiExplanation }]) ?? []
+    );
+
     return (
         <div>
             <p className="text-xs font-semibold text-gray-400 mb-3">Related Books:</p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {relatedBooks.map(book => (
-                    <div
-                        key={book.id}
-                        className="group flex flex-col rounded-lg border border-gray-700 bg-gray-800 p-2 transition-all hover:border-gray-600"
-                    >
-                        {/* Book Jacket Thumbnail */}
-                        {book.isbn ? (
-                            <div className="mb-2 overflow-hidden rounded-md bg-gray-700">
-                                <img
-                                    src={`https://cdn.anotherread.com/jackets/${book.isbn}.jpg`}
-                                    alt={`${book.title} book cover`}
-                                    className="h-32 w-full object-cover transition-transform group-hover:scale-105"
-                                    onError={(e) => {
-                                        // Fallback to book icon if image fails to load
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const fallback = target.nextElementSibling as HTMLElement;
-                                        if (fallback) fallback.style.display = 'flex';
-                                    }}
-                                />
-                                <div className="hidden h-32 w-full items-center justify-center text-4xl">
-                                    <Icon name="menu_book" className="text-4xl text-gray-600" />
-                                </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {relatedBooks.map(book => {
+                    const aiData = aiScoreMap.get(book.id);
+                    return (
+                        <div
+                            key={book.id}
+                            className="group flex gap-3 rounded-lg border border-gray-700 bg-gray-800 p-3 transition-all hover:border-gray-600"
+                        >
+                            {/* Book Jacket Thumbnail */}
+                            <div className="flex-shrink-0">
+                                {book.isbn ? (
+                                    <div className="overflow-hidden rounded-md bg-gray-700 w-20">
+                                        <img
+                                            src={`https://cdn.anotherread.com/jackets/${book.isbn}.jpg`}
+                                            alt={`${book.title} book cover`}
+                                            className="h-28 w-20 object-cover transition-transform group-hover:scale-105"
+                                            onError={(e) => {
+                                                // Fallback to book icon if image fails to load
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                                const fallback = target.nextElementSibling as HTMLElement;
+                                                if (fallback) fallback.style.display = 'flex';
+                                            }}
+                                        />
+                                        <div className="hidden h-28 w-20 items-center justify-center">
+                                            <Icon name="menu_book" className="text-2xl text-gray-600" />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex h-28 w-20 items-center justify-center rounded-md bg-gray-700">
+                                        <Icon name="menu_book" className="text-2xl text-gray-600" />
+                                    </div>
+                                )}
                             </div>
-                        ) : (
-                            <div className="mb-2 flex h-32 items-center justify-center rounded-md bg-gray-700 text-4xl">
-                                <Icon name="menu_book" className="text-4xl text-gray-600" />
-                            </div>
-                        )}
 
-                        {/* Book Info */}
-                        <div className="flex-1">
-                            <p className="line-clamp-2 text-xs font-medium text-gray-200">
-                                {book.title}
-                            </p>
-                            <p className="mt-1 text-xs text-gray-400">
-                                {book.author}
-                            </p>
+                            {/* Book Info */}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                    <p className="text-sm font-medium text-gray-200 line-clamp-2">
+                                        {book.title}
+                                    </p>
+                                    {aiData?.score !== null && aiData?.score !== undefined && (
+                                        <span
+                                            className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${aiData.score >= 8
+                                                ? 'bg-green-500/20 text-green-400'
+                                                : aiData.score >= 5
+                                                    ? 'bg-blue-500/20 text-blue-400'
+                                                    : 'bg-gray-500/20 text-gray-400'
+                                                }`}
+                                        >
+                                            {aiData.score}/10
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-400 mb-2">
+                                    {book.author}
+                                </p>
+                                {aiData?.explanation && (
+                                    <p className="text-xs text-gray-500 leading-relaxed">
+                                        {aiData.explanation}
+                                    </p>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
 }
-

@@ -196,6 +196,17 @@ export const eventRouter = createTRPCRouter({
             return relatedBooks;
         }),
 
+    getEventBooksWithScores: publicProcedure
+        .input(z.object({ eventId: z.number() }))
+        .query(async ({ ctx, input }) => {
+            const relations = await ctx.db.query.eventBooks.findMany({
+                where: eq(eventBooks.eventId, input.eventId),
+                orderBy: (eventBooks, { desc }) => [desc(eventBooks.aiScore)],
+            });
+
+            return relations;
+        }),
+
     suggestContent: protectedProcedure
         .input(z.object({ eventId: z.number() }))
         .mutation(async ({ ctx, input }) => {
@@ -267,7 +278,7 @@ export const eventRouter = createTRPCRouter({
                 });
             }
 
-            // Get full book details
+            // Get full book details with AI scores
             const bookIds = relatedBooks.map(r => r.bookId);
             const bookDetails = bookIds.length > 0
                 ? await ctx.db.query.books.findMany({
@@ -275,12 +286,23 @@ export const eventRouter = createTRPCRouter({
                 })
                 : [];
 
+            // Filter to only include books with AI score >= 5
+            const highQualityBooks = relatedBooks
+                .filter(eb => eb.aiScore !== null && eb.aiScore >= 5)
+                .map(eb => {
+                    const book = bookDetails.find(b => b.id === eb.bookId);
+                    return book;
+                })
+                .filter((book): book is NonNullable<typeof book> => book !== undefined);
+
+            console.log(`[Suggest Content] Found ${highQualityBooks.length} high-quality books (AI score >= 5) out of ${relatedBooks.length} total related books`);
+
             // Generate content using OpenAI
             const generatedContent = await generateEventContent(
                 event.name,
                 event.description,
                 event.keywords,
-                bookDetails.map(b => ({
+                highQualityBooks.map(b => ({
                     title: b.title,
                     author: b.author,
                     description: b.description,
@@ -290,12 +312,13 @@ export const eventRouter = createTRPCRouter({
             );
 
             // Store the generated content
+            const highQualityBookIds = highQualityBooks.map(b => b.id);
             const storedContent = await ctx.db.insert(content).values(
                 generatedContent.map(gc => ({
                     eventId: input.eventId,
                     title: gc.title,
                     content: gc.content,
-                    relatedBookIds: JSON.stringify(bookIds),
+                    relatedBookIds: JSON.stringify(highQualityBookIds),
                 }))
             ).returning();
 

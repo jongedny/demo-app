@@ -18,9 +18,10 @@ export interface DailyEvent {
 /**
  * Fetches daily UK events from OpenAI API
  * @param userId - Optional user ID for credit tracking
+ * @param recentEventNames - Optional array of recent event names to avoid duplicates
  * @returns Array of event objects with name, keywords, and description
  */
-export async function fetchDailyUKEvents(userId?: number): Promise<DailyEvent[]> {
+export async function fetchDailyUKEvents(userId?: number, recentEventNames?: string[]): Promise<DailyEvent[]> {
     const today = new Date();
     const dateString = today.toLocaleDateString("en-GB", {
         day: "numeric",
@@ -28,6 +29,13 @@ export async function fetchDailyUKEvents(userId?: number): Promise<DailyEvent[]>
     });
 
     const config = OPENAI_CONFIG.dailyEvents;
+
+    // Build the user prompt with recent events context if provided
+    let userPrompt = config.userPrompt(dateString);
+
+    if (recentEventNames && recentEventNames.length > 0) {
+        userPrompt += `\n\nIMPORTANT: The following events have been suggested recently. Please avoid suggesting these or very similar events:\n${recentEventNames.map(name => `- ${name}`).join('\n')}`;
+    }
 
     try {
         const completion = await openai.chat.completions.create({
@@ -39,7 +47,7 @@ export async function fetchDailyUKEvents(userId?: number): Promise<DailyEvent[]>
                 },
                 {
                     role: "user",
-                    content: config.userPrompt(dateString),
+                    content: userPrompt,
                 },
             ],
             temperature: config.temperature,

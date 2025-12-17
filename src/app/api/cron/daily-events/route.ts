@@ -32,8 +32,22 @@ export async function GET(request: NextRequest) {
 
         console.log("[Cron API] Starting daily event fetch...");
 
+        // Fetch recent events from the last 7 days to avoid duplicates
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const recentEvents = await db.query.events.findMany({
+            where: (events, { gte }) => gte(events.createdAt, sevenDaysAgo),
+            columns: {
+                name: true,
+            },
+        });
+
+        const recentEventNames = recentEvents.map(e => e.name);
+        console.log(`[Cron API] Found ${recentEventNames.length} recent events to avoid duplicating`);
+
         // Fetch events from OpenAI
-        const dailyEvents = await fetchDailyUKEvents();
+        const dailyEvents = await fetchDailyUKEvents(undefined, recentEventNames);
 
         if (dailyEvents.length === 0) {
             console.log("[Cron API] No events returned from OpenAI");
