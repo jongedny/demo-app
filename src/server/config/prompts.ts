@@ -41,13 +41,15 @@ For each event, provide:
 1. name: The event name
 2. keywords: An array of 3-5 relevant keywords related to the event
 3. description: A brief description of the event (maximum 200 words)
+4. date: The date in ISO format (YYYY-MM-DD)
 
 Please respond with ONLY a JSON array of objects in this exact format:
 [
   {
     "name": "Event Name 1",
     "keywords": ["keyword1", "keyword2", "keyword3"],
-    "description": "A brief description of the event..."
+    "description": "A brief description of the event...",
+    "date": "2025-12-17"
   }
 ]
 
