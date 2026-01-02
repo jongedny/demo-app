@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, like, ilike, or, and, sql } from "drizzle-orm";
 
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 import { books, eventBooks, events, bookContributors, contributors, publishers } from "~/server/db/schema";
@@ -80,6 +80,125 @@ export const bookRouter = createTRPCRouter({
             // Fetch contributors for all books
             const booksWithContributors = await Promise.all(
                 allBooks.map(async (book) => {
+                    const bookContributorRelations = await ctx.db.query.bookContributors.findMany({
+                        where: (bookContributors, { eq }) => eq(bookContributors.bookId, book.id),
+                        orderBy: (bookContributors, { asc }) => [asc(bookContributors.sequenceNumber)],
+                    });
+
+                    const bookContributorsData = [];
+                    if (bookContributorRelations.length > 0) {
+                        const contributorIds = bookContributorRelations.map(r => r.contributorId);
+                        const contributorsList = await ctx.db.query.contributors.findMany({
+                            where: (contributors, { inArray }) => inArray(contributors.id, contributorIds),
+                        });
+
+                        bookContributorsData.push(...contributorsList.map(contributor => {
+                            const relation = bookContributorRelations.find(r => r.contributorId === contributor.id);
+                            return {
+                                ...contributor,
+                                role: relation?.role,
+                                sequenceNumber: relation?.sequenceNumber,
+                            };
+                        }));
+                    }
+
+                    return {
+                        ...book,
+                        contributors: bookContributorsData,
+                    };
+                })
+            );
+
+            return booksWithContributors;
+        }),
+
+    search: publicProcedure
+        .input(
+            z.object({
+                isbn: z.string().optional(),
+                title: z.string().optional(),
+                contributor: z.string().optional(),
+                limit: z.number().min(1).max(100).optional(),
+                offset: z.number().min(0).optional(),
+            })
+        )
+        .query(async ({ ctx, input }) => {
+            const limit = input.limit ?? 50;
+            const offset = input.offset ?? 0;
+
+            // Build the where conditions
+            const conditions = [];
+
+            if (input.isbn) {
+                conditions.push(eq(books.isbn, input.isbn));
+            }
+
+            if (input.title) {
+                conditions.push(ilike(books.title, `%${input.title}%`));
+            }
+
+            let booksList;
+
+            // If searching by contributor, we need to join with the contributors table
+            if (input.contributor) {
+                // First, find all contributor IDs that match the search term
+                const matchingContributors = await ctx.db.query.contributors.findMany({
+                    where: ilike(contributors.name, `%${input.contributor}%`),
+                });
+
+                const contributorIds = matchingContributors.map(c => c.id);
+
+                if (contributorIds.length === 0) {
+                    // No matching contributors found
+                    return [];
+                }
+
+                // Find all book IDs that have these contributors
+                const bookContributorRelations = await ctx.db.query.bookContributors.findMany({
+                    where: inArray(bookContributors.contributorId, contributorIds),
+                });
+
+                const bookIds = [...new Set(bookContributorRelations.map(bc => bc.bookId))];
+
+                if (bookIds.length === 0) {
+                    return [];
+                }
+
+                // Now get the books, applying other filters if present
+                let whereCondition;
+                if (conditions.length > 0) {
+                    whereCondition = and(inArray(books.id, bookIds), ...conditions);
+                } else {
+                    whereCondition = inArray(books.id, bookIds);
+                }
+
+                booksList = await ctx.db.query.books.findMany({
+                    where: whereCondition,
+                    orderBy: (books, { desc }) => [desc(books.createdAt)],
+                    limit,
+                    offset,
+                });
+            } else {
+                // No contributor search, just apply other filters
+                if (conditions.length > 0) {
+                    booksList = await ctx.db.query.books.findMany({
+                        where: and(...conditions),
+                        orderBy: (books, { desc }) => [desc(books.createdAt)],
+                        limit,
+                        offset,
+                    });
+                } else {
+                    booksList = await ctx.db.query.books.findMany({
+                        orderBy: (books, { desc }) => [desc(books.createdAt)],
+                        limit,
+                        offset,
+                    });
+                }
+            }
+
+            // Fetch contributors for all books
+            const booksWithContributors = await Promise.all(
+                booksList.map(async (book) => {
                     const bookContributorRelations = await ctx.db.query.bookContributors.findMany({
                         where: (bookContributors, { eq }) => eq(bookContributors.bookId, book.id),
                         orderBy: (bookContributors, { asc }) => [asc(bookContributors.sequenceNumber)],

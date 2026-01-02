@@ -6,10 +6,20 @@ export const dynamic = "force-dynamic";
 export default async function BooksPage({
     searchParams,
 }: {
-    searchParams: Promise<{ eventId?: string }>;
+    searchParams: Promise<{
+        eventId?: string;
+        isbn?: string;
+        title?: string;
+        contributor?: string;
+    }>;
 }) {
     const params = await searchParams;
     const eventId = params.eventId ? parseInt(params.eventId) : undefined;
+    const searchFilters = {
+        isbn: params.isbn,
+        title: params.title,
+        contributor: params.contributor,
+    };
 
     void api.book.getAll.prefetch();
 
@@ -26,7 +36,11 @@ export default async function BooksPage({
 
                     {/* Book List */}
                     <div>
-                        <BookList eventId={eventId} showViewToggleAtTop={true} />
+                        <BookList
+                            eventId={eventId}
+                            showViewToggleAtTop={true}
+                            searchFilters={searchFilters}
+                        />
                     </div>
                 </div>
             </main>
